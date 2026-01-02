@@ -3,6 +3,7 @@
 
 #include <QGridLayout>
 #include <QPushButton>
+#include <QLabel>
 
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -58,8 +59,13 @@ VendingMachine::VendingMachine(QWidget* parent)
 
             QStringList categories = {"음료", "커피", "주스", "기타"};
 
-            for (const auto& name : categories) {
-                auto menu = new MenuWidget(name);
+            for (const auto& categoryName : categories) {
+                auto menuLabel = new QLabel(categoryName);
+                auto menu = new MenuWidget(categoryName);
+
+                menuLabel->setIndent(10);
+
+                ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
                 ui->scrollAreaWidgetContents->layout()->addWidget(menu);
             }
         }

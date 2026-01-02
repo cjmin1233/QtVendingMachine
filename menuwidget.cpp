@@ -52,7 +52,7 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
                     auto btn = new QToolButton(this);
                     btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
                     btn->setIconSize(QSize(120,120));
-                    btn->setText(name);
+                    btn->setText(QString("%1 (%2)").arg(name).arg(price));
                     btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
 
                     gridLayout->addWidget(btn, index/columns, index%columns);
