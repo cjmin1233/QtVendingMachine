@@ -13,6 +13,8 @@
 
 #include "menuwidget.h"
 
+#include <QToolButton>
+
 VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
@@ -20,6 +22,7 @@ VendingMachine::VendingMachine(QWidget* parent)
 {
     ui->setupUi(this);
 
+	// Set up scroll area layout
     auto layout = new QVBoxLayout(ui->scrollAreaWidgetContents);
     layout->setSpacing(10);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -57,13 +60,17 @@ VendingMachine::VendingMachine(QWidget* parent)
                 }
             }
 
+			// TODO: group categories from database
             QStringList categories = {"음료", "커피", "주스", "기타"};
 
+			// create menu widgets for each category
             for (const auto& categoryName : categories) {
                 auto menuLabel = new QLabel(categoryName);
                 auto menu = new MenuWidget(categoryName);
 
                 menuLabel->setIndent(10);
+				// connect menu item clicked signal to slot
+                connect(menu, SIGNAL(menuItemClicked(QToolButton*)), this, SLOT(on_menu_clicked(QToolButton*)));
 
                 ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
                 ui->scrollAreaWidgetContents->layout()->addWidget(menu);
@@ -71,15 +78,16 @@ VendingMachine::VendingMachine(QWidget* parent)
         }
     }
 
-    // load price db
-    // update price info to product buttons
-
     // connect button clicked signals to Calculating slots
-
-
 }
 
 VendingMachine::~VendingMachine()
 {
     delete ui;
+}
+
+void VendingMachine::on_menu_clicked(QToolButton* btn)
+{
+	// TODO: change parameter to product struct
+    qDebug()<<btn->text();
 }

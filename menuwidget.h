@@ -4,7 +4,7 @@
 #include <QWidget>
 #include <QString>
 
-class QPushButton;
+class QToolButton;
 class QImage;
 
 namespace Ui {
@@ -18,6 +18,12 @@ class MenuWidget : public QWidget
 public:
     explicit MenuWidget(const QString& categoryName, QWidget *parent = nullptr);
     ~MenuWidget();
+
+signals:
+    void menuItemClicked(QToolButton* btn);
+
+private slots:
+    void on_menuItem_clicked();
 
 private:
     Ui::MenuWidget *ui;

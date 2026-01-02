@@ -8,6 +8,7 @@ namespace Ui {
 class VendingMachine;
 }
 
+class QToolButton;
 
 class VendingMachine : public QWidget
 {
@@ -26,7 +27,7 @@ public:
     ~VendingMachine();
 
 public slots:
-
+    void on_menu_clicked(QToolButton* btn);
 
 private:
     Ui::VendingMachine *ui;

@@ -2,7 +2,6 @@
 #include "ui_menuwidget.h"
 
 #include <QGridLayout>
-#include <QPushButton>
 #include <QToolButton>
 
 #include <QSqlDatabase>
@@ -16,6 +15,7 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
 {
     ui->setupUi(this);
 
+	// Set up grid layout
     auto gridLayout = new QGridLayout(this);
     gridLayout->setAlignment(Qt::AlignLeft);
     setLayout(gridLayout);
@@ -30,6 +30,7 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
         }
         else
         {
+			// select items by category
             QSqlQuery query(QString("SELECT * "
                                     "FROM priceTable "
                                     "WHERE category = %1 "
@@ -49,12 +50,17 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
                     const int price = query.value(2).toInt();
                     const int stock = query.value(3).toInt();
 
+					// Create a tool button for each menu item
                     auto btn = new QToolButton(this);
                     btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
                     btn->setIconSize(QSize(120,120));
                     btn->setText(QString("%1 (%2)").arg(name).arg(price));
                     btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
 
+					// Connect button click signal to slot
+                    connect(btn, SIGNAL(clicked()), this, SLOT(on_menuItem_clicked()));
+
+					// Add button to grid layout
                     gridLayout->addWidget(btn, index/columns, index%columns);
 
                     ++index;
@@ -67,4 +73,12 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
 MenuWidget::~MenuWidget()
 {
     delete ui;
+}
+
+void MenuWidget::on_menuItem_clicked()
+{
+    auto btn = qobject_cast<QToolButton*>(sender());
+    // qDebug() << btn->text() << " clicked";
+
+    emit menuItemClicked(btn);
 }
