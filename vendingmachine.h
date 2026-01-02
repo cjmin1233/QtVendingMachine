@@ -2,13 +2,23 @@
 #define VENDINGMACHINE_H
 
 #include <QWidget>
+#include <QString>
 
 namespace Ui {
 class VendingMachine;
 }
 
+
 class VendingMachine : public QWidget
 {
+    struct Product
+    {
+        int id;
+        QString name;
+        int price;
+        int stock;
+    };
+
     Q_OBJECT
 
 public:
@@ -22,7 +32,8 @@ private:
     Ui::VendingMachine *ui;
 
     int m_balance = 3000;
-    // log db, price db
+
+    QVector<Product> m_Products;
 };
 
 #endif // VENDINGMACHINE_H

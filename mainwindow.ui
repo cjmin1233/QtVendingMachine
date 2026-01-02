@@ -20,19 +20,6 @@
      <verstretch>0</verstretch>
     </sizepolicy>
    </property>
-   <widget class="QPushButton" name="pushButton">
-    <property name="geometry">
-     <rect>
-      <x>690</x>
-      <y>490</y>
-      <width>80</width>
-      <height>24</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>PushButton</string>
-    </property>
-   </widget>
   </widget>
  </widget>
  <resources/>
