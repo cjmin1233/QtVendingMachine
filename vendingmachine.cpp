@@ -10,6 +10,8 @@
 #include <QVariant>
 #include <QDebug>
 
+#include "menuwidget.h"
+
 VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
@@ -17,16 +19,16 @@ VendingMachine::VendingMachine(QWidget* parent)
 {
     ui->setupUi(this);
 
-    // setup grid layout
-    const int columns = 4;
-    auto* gridLayout = new QGridLayout(this);
-    gridLayout->setContentsMargins(8, 8, 8, 8);
-    gridLayout->setSpacing(8);
-    setLayout(gridLayout);
+    auto layout = new QVBoxLayout(ui->scrollAreaWidgetContents);
+    layout->setSpacing(10);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setAlignment(Qt::AlignLeft);
+
+    ui->scrollAreaWidgetContents->setLayout(layout);
 
     {
         // load products from database
-        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
+        QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", QString("VendingMachine"));
         db.setDatabaseName("maindb.db");
 
         if (!db.open())
@@ -53,25 +55,15 @@ VendingMachine::VendingMachine(QWidget* parent)
                     m_Products.push_back({ id,name,price,stock });
                 }
             }
+
+            QStringList categories = {"음료", "커피", "주스", "기타"};
+
+            for (const auto& name : categories) {
+                auto menu = new MenuWidget(name);
+                ui->scrollAreaWidgetContents->layout()->addWidget(menu);
+            }
         }
     }
-
-    // create product buttons
-    for (qsizetype i = 0; i < m_Products.size(); ++i)
-    {
-        const int row = i / columns;
-        const int col = i % columns;
-
-        const QString& name = m_Products[i].name;
-        auto* btn = new QPushButton(name.isEmpty() ? QString("product %1").arg(i + 1) : name, this);
-
-        QString safeName = name;
-        safeName.replace(' ', '_');
-        btn->setObjectName(QString("button_%1_%2").arg(i + 1).arg(safeName));
-
-        gridLayout->addWidget(btn, row, col);
-    }
-
 
     // load price db
     // update price info to product buttons
