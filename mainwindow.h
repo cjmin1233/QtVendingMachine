@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 
+#include "vendingmachine.h"
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
@@ -19,5 +21,7 @@ public:
 
 private:
     Ui::MainWindow *ui;
+
+    VendingMachine* m_VendingMachine;
 };
 #endif // MAINWINDOW_H
