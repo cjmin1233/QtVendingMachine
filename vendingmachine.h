@@ -9,6 +9,7 @@ class VendingMachine;
 }
 
 class QToolButton;
+class MenuItem;
 
 class VendingMachine : public QWidget
 {
@@ -27,7 +28,7 @@ public:
     ~VendingMachine();
 
 public slots:
-    void on_menu_clicked(QToolButton* btn);
+    void on_menu_clicked(MenuItem* btn);
 
 private:
     Ui::VendingMachine *ui;

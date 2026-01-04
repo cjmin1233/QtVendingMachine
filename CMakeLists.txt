@@ -26,6 +26,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         vendingmachine.h vendingmachine.cpp vendingmachine.ui
         menuwidget.h menuwidget.cpp menuwidget.ui
         resources.qrc
+        menuitem.h menuitem.cpp
 
 
 

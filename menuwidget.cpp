@@ -1,5 +1,6 @@
 #include "menuwidget.h"
 #include "ui_menuwidget.h"
+#include "menuitem.h"
 
 #include <QGridLayout>
 #include <QToolButton>
@@ -51,7 +52,13 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
                     const int stock = query.value(3).toInt();
 
 					// Create a tool button for each menu item
-                    auto btn = new QToolButton(this);
+                    // auto btn = new QToolButton(this);
+                    // btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
+                    // btn->setIconSize(QSize(120,120));
+                    // btn->setText(QString("%1 (%2)").arg(name).arg(price));
+                    // btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+
+                    auto btn = new MenuItem(id, this);
                     btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
                     btn->setIconSize(QSize(120,120));
                     btn->setText(QString("%1 (%2)").arg(name).arg(price));
@@ -77,8 +84,13 @@ MenuWidget::~MenuWidget()
 
 void MenuWidget::on_menuItem_clicked()
 {
-    auto btn = qobject_cast<QToolButton*>(sender());
+    auto btn = qobject_cast<MenuItem*>(sender());
     // qDebug() << btn->text() << " clicked";
+
+    if(btn == nullptr)
+    {
+        return;
+    }
 
     emit menuItemClicked(btn);
 }

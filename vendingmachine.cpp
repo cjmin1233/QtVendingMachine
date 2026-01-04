@@ -12,8 +12,7 @@
 #include <QDebug>
 
 #include "menuwidget.h"
-
-#include <QToolButton>
+#include "menuitem.h"
 
 VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
@@ -70,7 +69,7 @@ VendingMachine::VendingMachine(QWidget* parent)
 
                 menuLabel->setIndent(10);
 				// connect menu item clicked signal to slot
-                connect(menu, SIGNAL(menuItemClicked(QToolButton*)), this, SLOT(on_menu_clicked(QToolButton*)));
+                connect(menu, SIGNAL(menuItemClicked(MenuItem*)), this, SLOT(on_menu_clicked(MenuItem*)));
 
                 ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
                 ui->scrollAreaWidgetContents->layout()->addWidget(menu);
@@ -86,8 +85,8 @@ VendingMachine::~VendingMachine()
     delete ui;
 }
 
-void VendingMachine::on_menu_clicked(QToolButton* btn)
+void VendingMachine::on_menu_clicked(MenuItem* btn)
 {
-	// TODO: change parameter to product struct
+    qDebug()<<"Menu ID: "<<btn->GetId();
     qDebug()<<btn->text();
 }

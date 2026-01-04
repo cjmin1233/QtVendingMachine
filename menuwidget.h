@@ -6,6 +6,7 @@
 
 class QToolButton;
 class QImage;
+class MenuItem;
 
 namespace Ui {
 class MenuWidget;
@@ -20,7 +21,7 @@ public:
     ~MenuWidget();
 
 signals:
-    void menuItemClicked(QToolButton* btn);
+    void menuItemClicked(MenuItem* btn);
 
 private slots:
     void on_menuItem_clicked();
