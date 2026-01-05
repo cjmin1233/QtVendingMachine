@@ -17,11 +17,24 @@ class VendingMachine : public QWidget
     Q_OBJECT
 
 public:
+    enum class ErrorCode
+    {
+        Ok = 0,
+
+        InsufficientBalance = 100,
+        OutOfStock = 101,
+        InvalidProduct = 102,
+
+        DatabaseError = 400,
+    };
+
+public:
     explicit VendingMachine(QWidget *parent = nullptr);
     ~VendingMachine();
 
-    bool canSell(int id) const;
+    ErrorCode canSell(int id) const;
     void dispense(int id);
+    void logTransaction(ErrorCode e, int id);
 
 public slots:
     void OnMenuClicked(MenuItem* btn);

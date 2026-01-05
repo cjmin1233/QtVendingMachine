@@ -9,9 +9,37 @@
 #include <QSqlError>
 #include <QVariant>
 #include <QDebug>
+#include <QDateTime>
 
 #include "menuwidget.h"
 #include "menuitem.h"
+
+static QString ErrorCode2String(VendingMachine::ErrorCode e)
+{
+    QString description;
+    switch (e)
+    {
+    case VendingMachine::ErrorCode::Ok:
+        description = "정상 판매.";
+        break;
+    case VendingMachine::ErrorCode::InsufficientBalance:
+        description = "잔액 부족.";
+        break;
+    case VendingMachine::ErrorCode::OutOfStock:
+        description = "재고 부족.";
+        break;
+    case VendingMachine::ErrorCode::InvalidProduct:
+        description = "유효하지 않은 물품.";
+        break;
+    case VendingMachine::ErrorCode::DatabaseError:
+        description = "데이터베이스 에러.";
+        break;
+    default:
+        break;
+    }
+
+    return description;
+}
 
 VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
@@ -84,23 +112,22 @@ VendingMachine::~VendingMachine()
     delete ui;
 }
 
-// TODO: return enum
-bool VendingMachine::canSell(int id) const
+VendingMachine::ErrorCode VendingMachine::canSell(int id) const
 {
     if(!m_ProductModel.products().contains(id))
     {
-        return false;
+        return ErrorCode::InvalidProduct;
     }
 
     const auto& product = m_ProductModel.products()[id];
     if(product.stock<=0)
     {
-        return false;
+        return ErrorCode::OutOfStock;
     }
 
     if(m_balance<product.price)
     {
-        return false;
+        return ErrorCode::InsufficientBalance;
     }
 
     // state inspect
@@ -108,7 +135,7 @@ bool VendingMachine::canSell(int id) const
 
     }
 
-    return true;
+    return ErrorCode::Ok;
 }
 
 void VendingMachine::dispense(int id)
@@ -120,6 +147,8 @@ void VendingMachine::dispense(int id)
     if(!db.open())
     {
         qWarning() << "DB not opened";
+        qDebug() << (int)ErrorCode::DatabaseError;
+        logTransaction(ErrorCode::DatabaseError, id);
         return;
     }
 
@@ -134,12 +163,16 @@ void VendingMachine::dispense(int id)
     if(!query.exec())
     {
         qWarning() << "DB update failed: "<<query.lastError().text();
+        qDebug() << (int)ErrorCode::DatabaseError;
+        logTransaction(ErrorCode::DatabaseError, id);
         return;
     }
 
     if(query.numRowsAffected() == 0)
     {
         qWarning() << "Dispense failed: no stock or invalid id";
+        qDebug() << (int)ErrorCode::DatabaseError;
+        logTransaction(ErrorCode::DatabaseError, id);
         return;
     }
 
@@ -147,16 +180,51 @@ void VendingMachine::dispense(int id)
     // after dispense
     --product.stock;
     emit m_ProductModel.productsChanged(product);
+    qDebug()<<(int)ErrorCode::Ok;
+    logTransaction(ErrorCode::Ok, id);
 }
 
 void VendingMachine::OnMenuClicked(MenuItem* btn)
 {
     int itemID = btn->GetId();
 
-    if(!canSell(itemID))
+    ErrorCode errCode = canSell(itemID);
+    if(errCode == ErrorCode::Ok)
     {
+        dispense(itemID);
+    }
+    else
+    {
+        qDebug() << (int)errCode;
+        logTransaction(errCode, itemID);
+    }
+}
+
+void VendingMachine::logTransaction(ErrorCode e, int id)
+{
+    QSqlDatabase db = QSqlDatabase::database("VendingMachine");
+    if(!db.open())
+    {
+        qDebug() << "Log db open failed";
         return;
     }
 
-    dispense(itemID);
+    QSqlQuery query(db);
+    query.prepare(
+        "INSERT INTO logTable "
+        "(log_time, product_id, error_code, description) "
+        "VALUES (:log_time, :product_id, :error_code, :description)"
+        );
+
+    query.bindValue(":log_time", QDateTime::currentDateTime());
+    query.bindValue(":product_id", id);
+    query.bindValue(":error_code", static_cast<int>(e));
+    query.bindValue(":description", ErrorCode2String(e));
+
+    if(!query.exec())
+    {
+        qWarning() << "DB update failed: "<<query.lastError().text();
+        qDebug() << (int)ErrorCode::DatabaseError;
+        return;
+    }
 }
