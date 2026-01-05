@@ -5,14 +5,13 @@
 #include <QGridLayout>
 #include <QToolButton>
 
-#include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QDebug>
 
-MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
+MenuWidget::MenuWidget(const QString& categoryName, const ProductModel& model, QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::MenuWidget)
     , m_CategoryName(categoryName)
+    , m_RefModel(model)
 {
     ui->setupUi(this);
 
@@ -21,60 +20,16 @@ MenuWidget::MenuWidget(const QString& categoryName, QWidget *parent)
     gridLayout->setAlignment(Qt::AlignLeft);
     setLayout(gridLayout);
 
-    {
-        // load products from database
-        QSqlDatabase db = QSqlDatabase::database(QString("VendingMachine"));
-
-        if (!db.open())
-        {
-            // qWarning() << "DB open failed: " << db.lastError().text();
-        }
-        else
-        {
-			// select items by category
-            QSqlQuery query(QString("SELECT * "
-                                    "FROM priceTable "
-                                    "WHERE category = %1 "
-                                    "ORDER BY id ASC ").arg("\'" + m_CategoryName + "\'"), db);
-            if (!query.exec())
+    connect(&m_RefModel, &ProductModel::productsChanged,
+            this, [this](const QString& categoryName, int id)
             {
-                // qWarning() << "query failed: " << query.lastError().text();
-            }
-            else
-            {
-                int index=0;
-                const int columns=4;
-                while (query.next())
+                if(categoryName == m_CategoryName)
                 {
-                    const int id = query.value(0).toInt();
-                    const QString name = query.value(1).toString();
-                    const int price = query.value(2).toInt();
-                    const int stock = query.value(3).toInt();
-
-					// Create a tool button for each menu item
-                    // auto btn = new QToolButton(this);
-                    // btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
-                    // btn->setIconSize(QSize(120,120));
-                    // btn->setText(QString("%1 (%2)").arg(name).arg(price));
-                    // btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-
-                    auto btn = new MenuItem(id, this);
-                    btn->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
-                    btn->setIconSize(QSize(120,120));
-                    btn->setText(QString("%1 (%2)").arg(name).arg(price));
-                    btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-
-					// Connect button click signal to slot
-                    connect(btn, SIGNAL(clicked()), this, SLOT(on_menuItem_clicked()));
-
-					// Add button to grid layout
-                    gridLayout->addWidget(btn, index/columns, index%columns);
-
-                    ++index;
+                    refreshItem(id);
                 }
-            }
-        }
-    }
+            });
+
+    refresh();
 }
 
 MenuWidget::~MenuWidget()
@@ -82,10 +37,102 @@ MenuWidget::~MenuWidget()
     delete ui;
 }
 
-void MenuWidget::on_menuItem_clicked()
+void MenuWidget::clearLayout()
+{
+    auto curLayout = this->layout();
+    while(auto item = curLayout->takeAt(0))
+    {
+        if(QWidget* w = item->widget())
+        {
+            w->deleteLater();
+        }
+        delete item;
+    }
+}
+
+// Refresh the menu items based on the current category
+void MenuWidget::refresh()
+{
+	// Clear existing items in the layout
+	auto gridLayout = qobject_cast<QGridLayout*>(layout());
+    if(gridLayout == nullptr)
+    {
+        return;
+	}
+
+    clearLayout();
+
+    int index=0;
+    const int columns=4;
+
+    const auto& products = m_RefModel.products();
+    for(const auto& product : products)
+    {
+        if(product.category != m_CategoryName)
+        {
+            continue;
+        }
+
+        const int id = product.id;
+        const QString& name = product.name;
+        const int price = product.price;
+        const int stock = product.stock;
+
+        auto menuItem = new MenuItem(id, this);
+        menuItem->setIcon(QIcon(QString(":/images/%1.jpg").arg(name)));
+        menuItem->setIconSize(QSize(120,120));
+        menuItem->setText(QString("%1 (%2)\n재고: %3").arg(name).arg(price).arg(stock));
+        menuItem->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+
+        // Connect button click signal to slot
+        connect(menuItem, SIGNAL(clicked()), this, SLOT(OnMenuClicked()));
+
+        // Add button to grid layout
+        int row = index / columns;
+        int col = index % columns;
+        gridLayout->addWidget(menuItem, row, col);
+
+        ++index;
+    }
+}
+
+// Refresh a specific menu item by its ID
+void MenuWidget::refreshItem(int id)
+{
+    auto gridLayout = qobject_cast<QGridLayout*>(layout());
+    if(gridLayout == nullptr)
+    {
+        return;
+    }
+
+    for(int i=0;i<gridLayout->count();++i)
+    {
+        QLayoutItem* item = gridLayout->itemAt(i);
+        if(item == nullptr)
+        {
+            continue;
+        }
+
+        auto menuItem = qobject_cast<MenuItem*>(item->widget());
+        if(menuItem == nullptr)
+        {
+            continue;
+        }
+
+        if(menuItem->GetId() == id)
+        {
+            const auto& product = m_RefModel.products()[id];
+
+            menuItem->setText(QString("%1 (%2)\n재고: %3").arg(product.name).arg(product.price).arg(product.stock));
+            menuItem->setEnabled(product.stock > 0);
+            return;
+        }
+    }
+}
+
+void MenuWidget::OnMenuClicked()
 {
     auto btn = qobject_cast<MenuItem*>(sender());
-    // qDebug() << btn->text() << " clicked";
 
     if(btn == nullptr)
     {

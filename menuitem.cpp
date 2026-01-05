@@ -6,3 +6,8 @@ MenuItem::MenuItem(int id, QWidget *parent)
 {
 
 }
+
+void MenuItem::refreshItem(const ProductModel::Product& product)
+{
+
+}

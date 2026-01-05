@@ -17,7 +17,7 @@
 VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
-    , m_Products{}
+    , m_ProductModel(this)
 {
     ui->setupUi(this);
 
@@ -40,7 +40,6 @@ VendingMachine::VendingMachine(QWidget* parent)
         }
         else
         {
-            auto tables = db.tables();
             QSqlQuery query(db);
             if (!query.exec("select * from priceTable order by id asc"))
             {
@@ -51,33 +50,34 @@ VendingMachine::VendingMachine(QWidget* parent)
                 while (query.next())
                 {
                     const int id = query.value(0).toInt();
-                    const QString name = query.value(1).toString();
+                    const QString& name = query.value(1).toString();
                     const int price = query.value(2).toInt();
                     const int stock = query.value(3).toInt();
+                    const QString& category = query.value(4).toString();
 
-                    m_Products.push_back({ id,name,price,stock });
+                    ProductModel::Product p={id,name,price,stock,category};
+                    m_ProductModel.insert(p);
                 }
             }
 
-			// TODO: group categories from database
-            QStringList categories = {"음료", "커피", "주스", "기타"};
+			// define category order
+            QStringList categoryOrder = {"음료", "커피", "주스", "기타"};
 
 			// create menu widgets for each category
-            for (const auto& categoryName : categories) {
+            for (const auto& categoryName : categoryOrder)
+            {
                 auto menuLabel = new QLabel(categoryName);
-                auto menu = new MenuWidget(categoryName);
+                auto menu = new MenuWidget(categoryName, m_ProductModel);
 
                 menuLabel->setIndent(10);
 				// connect menu item clicked signal to slot
-                connect(menu, SIGNAL(menuItemClicked(MenuItem*)), this, SLOT(on_menu_clicked(MenuItem*)));
+                connect(menu, SIGNAL(menuItemClicked(MenuItem*)), this, SLOT(OnMenuClicked(MenuItem*)));
 
                 ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
                 ui->scrollAreaWidgetContents->layout()->addWidget(menu);
             }
         }
     }
-
-    // connect button clicked signals to Calculating slots
 }
 
 VendingMachine::~VendingMachine()
@@ -85,8 +85,24 @@ VendingMachine::~VendingMachine()
     delete ui;
 }
 
-void VendingMachine::on_menu_clicked(MenuItem* btn)
+void VendingMachine::OnMenuClicked(MenuItem* btn)
 {
-    qDebug()<<"Menu ID: "<<btn->GetId();
-    qDebug()<<btn->text();
+    int itemID = btn->GetId();
+    auto& product = m_ProductModel.products()[itemID];
+
+    // inspect balance, stock
+    if(product.stock>0 && m_balance >= product.price)
+    {
+        // if OK, dispense
+        --product.stock;
+        qDebug()<<"balance: "<<m_balance;
+
+        // after dispense
+        emit m_ProductModel.productsChanged(product.category, product.id);
+    }
+    // else, return error
+    else
+    {
+
+    }
 }

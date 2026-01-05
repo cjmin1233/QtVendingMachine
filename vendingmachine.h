@@ -4,6 +4,8 @@
 #include <QWidget>
 #include <QString>
 
+#include "productmodel.h"
+
 namespace Ui {
 class VendingMachine;
 }
@@ -13,14 +15,6 @@ class MenuItem;
 
 class VendingMachine : public QWidget
 {
-    struct Product
-    {
-        int id;
-        QString name;
-        int price;
-        int stock;
-    };
-
     Q_OBJECT
 
 public:
@@ -28,14 +22,13 @@ public:
     ~VendingMachine();
 
 public slots:
-    void on_menu_clicked(MenuItem* btn);
+    void OnMenuClicked(MenuItem* btn);
 
 private:
     Ui::VendingMachine *ui;
 
+    ProductModel m_ProductModel;
     int m_balance = 3000;
-
-    QVector<Product> m_Products;
 };
 
 #endif // VENDINGMACHINE_H

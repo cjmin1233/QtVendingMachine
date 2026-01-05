@@ -3,6 +3,8 @@
 
 #include <QToolButton>
 
+#include "productmodel.h"
+
 class MenuItem : public QToolButton
 {
     Q_OBJECT
@@ -12,6 +14,7 @@ public:
     ~MenuItem() = default;
 
     int GetId() const {return m_MenuId;}
+    void refreshItem(const ProductModel::Product& product);
 
 private:
     int m_MenuId;
