@@ -2,7 +2,6 @@
 #include "ui_vendingmachine.h"
 
 #include <QGridLayout>
-#include <QPushButton>
 #include <QLabel>
 
 #include <QSqlDatabase>
@@ -85,24 +84,52 @@ VendingMachine::~VendingMachine()
     delete ui;
 }
 
+// TODO: return enum
+bool VendingMachine::canSell(int id) const
+{
+    if(!m_ProductModel.products().contains(id))
+    {
+        return false;
+    }
+
+    const auto& product = m_ProductModel.products()[id];
+    if(product.stock<=0)
+    {
+        return false;
+    }
+
+    if(m_balance<product.price)
+    {
+        return false;
+    }
+
+    // state inspect
+    {
+
+    }
+
+    return true;
+}
+
+void VendingMachine::dispense(int id)
+{
+    auto& product = m_ProductModel.products()[id];
+
+    // dispense...
+    --product.stock;
+
+    // after dispense
+    emit m_ProductModel.productsChanged(product);
+}
+
 void VendingMachine::OnMenuClicked(MenuItem* btn)
 {
     int itemID = btn->GetId();
-    auto& product = m_ProductModel.products()[itemID];
 
-    // inspect balance, stock
-    if(product.stock>0 && m_balance >= product.price)
+    if(!canSell(itemID))
     {
-        // if OK, dispense
-        --product.stock;
-        qDebug()<<"balance: "<<m_balance;
-
-        // after dispense
-        emit m_ProductModel.productsChanged(product.category, product.id);
+        return;
     }
-    // else, return error
-    else
-    {
 
-    }
+    dispense(itemID);
 }

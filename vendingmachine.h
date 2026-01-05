@@ -10,7 +10,6 @@ namespace Ui {
 class VendingMachine;
 }
 
-class QToolButton;
 class MenuItem;
 
 class VendingMachine : public QWidget
@@ -21,6 +20,9 @@ public:
     explicit VendingMachine(QWidget *parent = nullptr);
     ~VendingMachine();
 
+    bool canSell(int id) const;
+    void dispense(int id);
+
 public slots:
     void OnMenuClicked(MenuItem* btn);
 
@@ -28,7 +30,7 @@ private:
     Ui::VendingMachine *ui;
 
     ProductModel m_ProductModel;
-    int m_balance = 3000;
+    int m_balance = 1500;
 };
 
 #endif // VENDINGMACHINE_H

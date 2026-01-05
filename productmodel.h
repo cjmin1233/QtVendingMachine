@@ -20,14 +20,14 @@ public:
 public:
     explicit ProductModel(QObject *parent = nullptr);
 
-    void insert(const Product& product) {m_Products[product.id] = product; emit productsChanged(product.category, product.id);}
+    void insert(const Product& product) {m_Products[product.id] = product; emit productsChanged(product);}
 
     QMap<int, Product>& products() {return m_Products;}
     const QMap<int, Product>& products() const {return m_Products;}
 
 signals:
     // value changed
-    void productsChanged(const QString& category, int id);
+    void productsChanged(const Product& product);
 
 private:
     QMap<int, Product> m_Products;

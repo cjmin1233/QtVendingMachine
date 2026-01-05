@@ -21,11 +21,11 @@ MenuWidget::MenuWidget(const QString& categoryName, const ProductModel& model, Q
     setLayout(gridLayout);
 
     connect(&m_RefModel, &ProductModel::productsChanged,
-            this, [this](const QString& categoryName, int id)
+            this, [this](const ProductModel::Product& product)
             {
-                if(categoryName == m_CategoryName)
+                if(product.category == m_CategoryName)
                 {
-                    refreshItem(id);
+                    refreshItem(product);
                 }
             });
 
@@ -97,7 +97,7 @@ void MenuWidget::refresh()
 }
 
 // Refresh a specific menu item by its ID
-void MenuWidget::refreshItem(int id)
+void MenuWidget::refreshItem(const ProductModel::Product& product)
 {
     auto gridLayout = qobject_cast<QGridLayout*>(layout());
     if(gridLayout == nullptr)
@@ -119,10 +119,8 @@ void MenuWidget::refreshItem(int id)
             continue;
         }
 
-        if(menuItem->GetId() == id)
+        if(menuItem->GetId() == product.id)
         {
-            const auto& product = m_RefModel.products()[id];
-
             menuItem->setText(QString("%1 (%2)\n재고: %3").arg(product.name).arg(product.price).arg(product.stock));
             menuItem->setEnabled(product.stock > 0);
             return;

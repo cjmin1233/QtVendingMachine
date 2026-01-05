@@ -22,7 +22,7 @@ public:
 
     void clearLayout();
     void refresh();
-    void refreshItem(int id);
+    void refreshItem(const ProductModel::Product& product);
 
 signals:
     void menuItemClicked(MenuItem* btn);
