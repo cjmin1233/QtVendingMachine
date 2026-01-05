@@ -116,9 +116,36 @@ void VendingMachine::dispense(int id)
     auto& product = m_ProductModel.products()[id];
 
     // dispense...
-    --product.stock;
+    QSqlDatabase db = QSqlDatabase::database("VendingMachine");
+    if(!db.open())
+    {
+        qWarning() << "DB not opened";
+        return;
+    }
+
+    QSqlQuery query(db);
+    query.prepare(
+        "UPDATE priceTable "
+        "SET stock = stock - 1 "
+        "WHERE id = :id AND stock > 0"
+        );
+    query.bindValue(":id",id);
+
+    if(!query.exec())
+    {
+        qWarning() << "DB update failed: "<<query.lastError().text();
+        return;
+    }
+
+    if(query.numRowsAffected() == 0)
+    {
+        qWarning() << "Dispense failed: no stock or invalid id";
+        return;
+    }
+
 
     // after dispense
+    --product.stock;
     emit m_ProductModel.productsChanged(product);
 }
 

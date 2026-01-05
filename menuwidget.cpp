@@ -83,6 +83,7 @@ void MenuWidget::refresh()
         menuItem->setIconSize(QSize(120,120));
         menuItem->setText(QString("%1 (%2)\n재고: %3").arg(name).arg(price).arg(stock));
         menuItem->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        menuItem->setEnabled(stock > 0);
 
         // Connect button click signal to slot
         connect(menuItem, SIGNAL(clicked()), this, SLOT(OnMenuClicked()));
