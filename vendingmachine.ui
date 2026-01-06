@@ -71,7 +71,7 @@
          <x>0</x>
          <y>0</y>
          <width>755</width>
-         <height>523</height>
+         <height>515</height>
         </rect>
        </property>
       </widget>
@@ -86,6 +86,13 @@
        <widget class="QLabel" name="labelBalance">
         <property name="text">
          <string>TextLabel</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnDeposit">
+        <property name="text">
+         <string>입금</string>
         </property>
        </widget>
       </item>

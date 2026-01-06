@@ -24,6 +24,8 @@ public:
     enum class ErrorCode
     {
         Ok = 0,
+        Debit = 1,
+        Deposit = 2,
 
         InsufficientBalance = 100,
         OutOfStock = 101,
@@ -38,6 +40,9 @@ public:
 
     ErrorCode canSell(int id) const;
     void dispense();
+    void debit();
+    void deposit(int amount);
+
     void logLastTransaction();
     void logTransaction(ErrorCode e, int id);
 
@@ -47,6 +52,7 @@ public slots:
 signals:
     // FSM I/O Events
     void sigSelectionProduct(int id);
+    void sigDeposit();
 
     void sigDone();
     void sigError();
@@ -58,6 +64,7 @@ private:
     void enterBooting();
     void enterValidating();
     void enterDebiting();
+	void enterDepositing();
     void enterDispensing();
     void enterSuccess();
     void enterError();
@@ -65,11 +72,13 @@ private:
     void showMessageBox(const QString& title, const QString& text);
     void setStatus(const QString& text);
 
+    int getBalance();
+
 private:
     Ui::VendingMachine *ui;
 
     ProductModel m_ProductModel;
-    int m_balance = 3000;
+    int m_Balance = 0;
 
 	int m_SelectedProductId = -1;
 	ErrorCode m_LastError = ErrorCode::Ok;
@@ -81,6 +90,7 @@ private:
     QState* m_Idle = nullptr;
     QState* m_Validating = nullptr;
     QState* m_Debiting = nullptr;
+	QState* m_Depositing = nullptr;
     QState* m_Dispensing = nullptr;
     QState* m_Success = nullptr;
     QState* m_Error = nullptr;

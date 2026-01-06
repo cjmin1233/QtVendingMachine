@@ -6,7 +6,7 @@ int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
     MainWindow w;
-    w.setWindowTitle("Vending Machine");
+    w.setWindowTitle("자판기");
     w.show();
     return a.exec();
 }
