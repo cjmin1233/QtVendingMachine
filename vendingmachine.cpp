@@ -47,7 +47,7 @@ VendingMachine::VendingMachine(QWidget* parent)
 {
     ui->setupUi(this);
 
-	// Set up scroll area layout
+    // Set up scroll area layout
     auto layout = new QVBoxLayout(ui->scrollAreaWidgetContents);
     layout->setSpacing(10);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -68,18 +68,20 @@ VendingMachine::~VendingMachine()
 
 VendingMachine::ErrorCode VendingMachine::canSell(int id) const
 {
-    if(!m_ProductModel.products().contains(id))
+	// check if product exists
+    if (!m_ProductModel.products().contains(id))
     {
         return ErrorCode::InvalidProduct;
     }
 
+	// check stock and balance
     const auto& product = m_ProductModel.products()[id];
-    if(product.stock<=0)
+    if (product.stock <= 0)
     {
         return ErrorCode::OutOfStock;
     }
 
-    if(m_balance<product.price)
+    if (m_balance < product.price)
     {
         return ErrorCode::InsufficientBalance;
     }
@@ -97,8 +99,9 @@ void VendingMachine::dispense()
         emit sigError();
         return;
     }
-
-    if(!Db::begin())
+    
+    // Begin database transaction
+    if (!Db::begin())
     {
         m_LastError = ErrorCode::DatabaseError;
 
@@ -106,6 +109,7 @@ void VendingMachine::dispense()
         return;
     }
 
+	// Query to decrement stock
     QSqlQuery query(db);
     query.prepare(
         "UPDATE priceTable "
@@ -114,6 +118,7 @@ void VendingMachine::dispense()
         );
     query.bindValue(":id", m_SelectedProductId);
 
+	// Execute the query, check for success
     if (!query.exec() || query.numRowsAffected() == 0)
     {
         Db::rollback();
@@ -123,7 +128,8 @@ void VendingMachine::dispense()
         return;
     }
 
-    if(!Db::commit())
+	// Commit transaction
+    if (!Db::commit())
     {
         Db::rollback();
         m_LastError = ErrorCode::DatabaseError;
@@ -144,8 +150,8 @@ void VendingMachine::dispense()
 void VendingMachine::OnMenuClicked(MenuItem* btn)
 {
     int itemID = btn->GetId();
-
     m_SelectedProductId = itemID;
+
     emit sigSelectionProduct(itemID);
 }
 
@@ -155,10 +161,18 @@ void VendingMachine::logLastTransaction()
 }
 void VendingMachine::logTransaction(ErrorCode e, int id)
 {
-    QSqlDatabase db = QSqlDatabase::database("VendingMachine");
-    if(!db.open())
+    QSqlDatabase db = Db::database();
+    if (!db.isOpen())
     {
         qDebug() << "Log db open failed";
+        return;
+    }
+
+    // Begin database transaction
+    if (!Db::begin())
+    {
+		qDebug() << "Log db begin transaction failed";
+
         return;
     }
 
@@ -167,23 +181,35 @@ void VendingMachine::logTransaction(ErrorCode e, int id)
         "INSERT INTO logTable "
         "(log_time, product_id, error_code, description) "
         "VALUES (:log_time, :product_id, :error_code, :description)"
-        );
+    );
 
     query.bindValue(":log_time", QDateTime::currentDateTime());
     query.bindValue(":product_id", id);
     query.bindValue(":error_code", static_cast<int>(e));
     query.bindValue(":description", ErrorCode2String(e));
 
-    if(!query.exec())
+    // Execute the query, check for success
+    if (!query.exec() || query.numRowsAffected() == 0)
     {
-        qWarning() << "DB update failed: "<<query.lastError().text();
+        Db::rollback();
+        qWarning() << "DB update failed: " << query.lastError().text();
+
+        return;
+    }
+
+    // Commit transaction
+    if (!Db::commit())
+    {
+        Db::rollback();
+        qWarning() << "DB update failed: " << query.lastError().text();
+
         return;
     }
 }
 
 void VendingMachine::setupStateMachine()
 {
-	// Initialize states
+    // Initialize states
     m_Booting = new QState();
     m_OutofService = new QState();
     m_Idle = new QState();
@@ -193,22 +219,22 @@ void VendingMachine::setupStateMachine()
     m_Success = new QState();
     m_Error = new QState();
 
-	// Add states to the state machine
-	m_StateMachine.addState(m_Booting);
-	m_StateMachine.addState(m_OutofService);
-	m_StateMachine.addState(m_Idle);
-	m_StateMachine.addState(m_Validating);
-	m_StateMachine.addState(m_Debiting);
-	m_StateMachine.addState(m_Dispensing);
-	m_StateMachine.addState(m_Success);
-	m_StateMachine.addState(m_Error);
+    // Add states to the state machine
+    m_StateMachine.addState(m_Booting);
+    m_StateMachine.addState(m_OutofService);
+    m_StateMachine.addState(m_Idle);
+    m_StateMachine.addState(m_Validating);
+    m_StateMachine.addState(m_Debiting);
+    m_StateMachine.addState(m_Dispensing);
+    m_StateMachine.addState(m_Success);
+    m_StateMachine.addState(m_Error);
 
-	// Set the initial state
-	m_StateMachine.setInitialState(m_Booting);
+    // Set the initial state
+    m_StateMachine.setInitialState(m_Booting);
 
-	// Connect state entered signals to corresponding slots or lambdas
+    // Connect state entered signals to corresponding slots or lambdas
     connect(m_Booting, &QState::entered,
-        this, &VendingMachine::enterBooting);
+            this, &VendingMachine::enterBooting);
     connect(m_Idle, &QState::entered,
             [this]()
             {
@@ -221,7 +247,7 @@ void VendingMachine::setupStateMachine()
                 ui->scrollArea->setEnabled(false);
             });
     connect(m_OutofService, &QState::entered,
-            [this](){setStatus(QStringLiteral("점검 중(Out of Service)"));});
+            [this]() {setStatus(QStringLiteral("점검 중(Out of Service)")); });
 
     connect(m_Validating, &QState::entered,
             this, &VendingMachine::enterValidating);
@@ -234,37 +260,37 @@ void VendingMachine::setupStateMachine()
     connect(m_Error, &QState::entered,
             this, &VendingMachine::enterError);
 
-	// Booting state transitions
+    // Booting state transitions
     m_Booting->addTransition(this, &VendingMachine::sigError,
-		m_OutofService);
+                             m_OutofService);
     m_Booting->addTransition(this, &VendingMachine::sigDone,
-        m_Idle);
+                             m_Idle);
 
-	// Idle state transitions
+    // Idle state transitions
     m_Idle->addTransition(this, &VendingMachine::sigSelectionProduct,
-		m_Validating);
+                          m_Validating);
 
     // Validating state transitions
     m_Validating->addTransition(this, &VendingMachine::sigDone,
-        m_Debiting);
+                                m_Debiting);
     m_Validating->addTransition(this, &VendingMachine::sigError,
-        m_Error);
+                                m_Error);
 
     // Debiting state transitions
     m_Debiting->addTransition(this, &VendingMachine::sigDone,
-        m_Dispensing);
+                              m_Dispensing);
 
     // Dispensing state transitions
     m_Dispensing->addTransition(this, &VendingMachine::sigDone,
-        m_Success);
+                                m_Success);
     m_Dispensing->addTransition(this, &VendingMachine::sigError,
-        m_Error);
+                                m_Error);
 
     // Success and Error state transitions
     m_Success->addTransition(this, &VendingMachine::sigDone,
-        m_Idle);
+                             m_Idle);
     m_Error->addTransition(this, &VendingMachine::sigDone,
-        m_Idle);
+                           m_Idle);
 }
 
 void VendingMachine::enterBooting()
@@ -282,7 +308,6 @@ void VendingMachine::enterBooting()
         return;
     }
 
-    //
     QSqlQuery query(db);
     if (!query.exec("select * from priceTable order by id asc"))
     {
@@ -292,19 +317,18 @@ void VendingMachine::enterBooting()
         emit sigError();
         return;
     }
-    else
-    {
-        while (query.next())
-        {
-            const int id = query.value(0).toInt();
-            const QString& name = query.value(1).toString();
-            const int price = query.value(2).toInt();
-            const int stock = query.value(3).toInt();
-            const QString& category = query.value(4).toString();
 
-            ProductModel::Product p = { id,name,price,stock,category };
-            m_ProductModel.insert(p);
-        }
+    // populate product model
+    while (query.next())
+    {
+        const int id = query.value(0).toInt();
+        const QString& name = query.value(1).toString();
+        const int price = query.value(2).toInt();
+        const int stock = query.value(3).toInt();
+        const QString& category = query.value(4).toString();
+
+        ProductModel::Product p = { id,name,price,stock,category };
+        m_ProductModel.insert(p);
     }
 
     // define category order
@@ -324,6 +348,7 @@ void VendingMachine::enterBooting()
         ui->scrollAreaWidgetContents->layout()->addWidget(menu);
     }
 
+    // Initialize balance text
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
 
     // Transition to Idle state
@@ -334,40 +359,36 @@ void VendingMachine::enterValidating()
 {
     setStatus(QStringLiteral("선택한 상품 확인 중..."));
 
-	const ErrorCode e = canSell(m_SelectedProductId);
+    const ErrorCode e = canSell(m_SelectedProductId);
 
-    if(e == ErrorCode::Ok)
+    if (e == ErrorCode::Ok)
     {
-        m_Timer.singleShot(400, this, [this](){emit sigDone();});
-        // emit sigDone();
+        m_Timer.singleShot(400, this, [this]() {emit sigDone(); });
     }
     else
     {
         m_LastError = e;
 
-        m_Timer.singleShot(400, this, [this](){emit sigError();});
-        // emit sigError();
-	}
+        m_Timer.singleShot(400, this, [this]() {emit sigError(); });
+    }
 }
 
 void VendingMachine::enterDebiting()
 {
     setStatus(QStringLiteral("결제 처리 중..."));
 
-	const auto& product = m_ProductModel.products()[m_SelectedProductId];
+    const auto& product = m_ProductModel.products()[m_SelectedProductId];
     m_balance -= product.price;
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
 
-    // emit sigDone();
-    m_Timer.singleShot(500, this, [this](){emit sigDone();});
+    m_Timer.singleShot(500, this, [this]() {emit sigDone(); });
 }
 
 void VendingMachine::enterDispensing()
 {
-    // dispense();
     setStatus(QStringLiteral("물품 배출중..."));
 
-    m_Timer.singleShot(1200, this, [this](){dispense();});
+    m_Timer.singleShot(1200, this, [this]() {dispense(); });
 }
 
 void VendingMachine::enterSuccess()
