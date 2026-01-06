@@ -1,15 +1,14 @@
 #include "vendingmachine.h"
 #include "ui_vendingmachine.h"
 
-#include <QGridLayout>
-#include <QLabel>
-
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QVariant>
 #include <QDebug>
 #include <QDateTime>
+#include <QLabel>
+#include <QMessageBox>
 
 #include "menuwidget.h"
 #include "menuitem.h"
@@ -34,8 +33,6 @@ static QString ErrorCode2String(VendingMachine::ErrorCode e)
     case VendingMachine::ErrorCode::DatabaseError:
         description = "데이터베이스 에러.";
         break;
-    default:
-        break;
     }
 
     return description;
@@ -45,7 +42,6 @@ VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
     , m_ProductModel(this)
-	, m_FeedbackTimer(this)
 {
     ui->setupUi(this);
 
@@ -84,25 +80,17 @@ VendingMachine::ErrorCode VendingMachine::canSell(int id) const
         return ErrorCode::InsufficientBalance;
     }
 
-    // state inspect
-    {
-
-    }
-
     return ErrorCode::Ok;
 }
 
-void VendingMachine::dispense(int id)
+void VendingMachine::dispense()
 {
-    auto& product = m_ProductModel.products()[id];
-
-    // dispense...
     QSqlDatabase db = QSqlDatabase::database("VendingMachine");
-    if(!db.open())
+    if (!db.open())
     {
-        qWarning() << "DB not opened";
-        qDebug() << (int)ErrorCode::DatabaseError;
-        logTransaction(ErrorCode::DatabaseError, id);
+        m_LastError = ErrorCode::DatabaseError;
+
+        emit sigError();
         return;
     }
 
@@ -112,29 +100,23 @@ void VendingMachine::dispense(int id)
         "SET stock = stock - 1 "
         "WHERE id = :id AND stock > 0"
         );
-    query.bindValue(":id",id);
+    query.bindValue(":id", m_SelectedProductId);
 
-    if(!query.exec())
+    if (!query.exec() || query.numRowsAffected() == 0)
     {
-        qWarning() << "DB update failed: "<<query.lastError().text();
-        qDebug() << (int)ErrorCode::DatabaseError;
-        logTransaction(ErrorCode::DatabaseError, id);
-        return;
-    }
+        m_LastError = ErrorCode::DatabaseError;
 
-    if(query.numRowsAffected() == 0)
-    {
-        qWarning() << "Dispense failed: no stock or invalid id";
-        qDebug() << (int)ErrorCode::DatabaseError;
-        logTransaction(ErrorCode::DatabaseError, id);
+        emit sigError();
         return;
     }
 
     // after dispense
+    auto& product = m_ProductModel.products()[m_SelectedProductId];
     --product.stock;
+    m_LastError = ErrorCode::Ok;
+
     emit m_ProductModel.productsChanged(product);
-    qDebug()<<(int)ErrorCode::Ok;
-    logTransaction(ErrorCode::Ok, id);
+    emit sigDone();
 }
 
 void VendingMachine::OnMenuClicked(MenuItem* btn)
@@ -142,20 +124,13 @@ void VendingMachine::OnMenuClicked(MenuItem* btn)
     int itemID = btn->GetId();
 
     m_SelectedProductId = itemID;
-	emit sigSelectionProduct(itemID);
-
-    //ErrorCode errCode = canSell(itemID);
-    //if(errCode == ErrorCode::Ok)
-    //{
-    //    dispense(itemID);
-    //}
-    //else
-    //{
-    //    qDebug() << (int)errCode;
-    //    logTransaction(errCode, itemID);
-    //}
+    emit sigSelectionProduct(itemID);
 }
 
+void VendingMachine::logLastTransaction()
+{
+    logTransaction(m_LastError, m_SelectedProductId);
+}
 void VendingMachine::logTransaction(ErrorCode e, int id)
 {
     QSqlDatabase db = QSqlDatabase::database("VendingMachine");
@@ -180,7 +155,6 @@ void VendingMachine::logTransaction(ErrorCode e, int id)
     if(!query.exec())
     {
         qWarning() << "DB update failed: "<<query.lastError().text();
-        qDebug() << (int)ErrorCode::DatabaseError;
         return;
     }
 }
@@ -213,26 +187,26 @@ void VendingMachine::setupStateMachine()
 	// Connect state entered signals to corresponding slots or lambdas
     connect(m_Booting, &QState::entered,
         this, &VendingMachine::enterBooting);
-    connect(m_Idle, &QState::entered, [this]()
-            {
-                qDebug()<<"Enter Idle state";
-            });
+    connect(m_Idle, &QState::entered,
+            [this](){ui->scrollArea->setEnabled(true);});
+    connect(m_Idle, &QState::exited,
+            [this](){ui->scrollArea->setEnabled(false);});
 
     connect(m_Validating, &QState::entered,
-		this, &VendingMachine::enterValidating);
-	connect(m_Debiting, &QState::entered,
-		this, &VendingMachine::enterDebiting);
-	connect(m_Dispensing, &QState::entered,
-		this, &VendingMachine::enterDispensing);
-	connect(m_Success, &QState::entered,
-		this, &VendingMachine::enterSuccess);
+            this, &VendingMachine::enterValidating);
+    connect(m_Debiting, &QState::entered,
+            this, &VendingMachine::enterDebiting);
+    connect(m_Dispensing, &QState::entered,
+            this, &VendingMachine::enterDispensing);
+    connect(m_Success, &QState::entered,
+            this, &VendingMachine::enterSuccess);
     connect(m_Error, &QState::entered,
-            [this](){enterError(m_LastError);});
+            this, &VendingMachine::enterError);
 
 	// Booting state transitions
-    m_Booting->addTransition(this, &VendingMachine::sigShowMessage,
+    m_Booting->addTransition(this, &VendingMachine::sigError,
 		m_OutofService);
-    m_Booting->addTransition(this, &VendingMachine::sigClearMessage,
+    m_Booting->addTransition(this, &VendingMachine::sigDone,
         m_Idle);
 
 	// Idle state transitions
@@ -240,25 +214,25 @@ void VendingMachine::setupStateMachine()
 		m_Validating);
 
     // Validating state transitions
-	m_Validating->addTransition(this, &VendingMachine::sigValidationDone,
+    m_Validating->addTransition(this, &VendingMachine::sigDone,
         m_Debiting);
-    m_Validating->addTransition(this, &VendingMachine::sigValidationFailed,
+    m_Validating->addTransition(this, &VendingMachine::sigError,
         m_Error);
 
     // Debiting state transitions
-    m_Debiting->addTransition(this, &VendingMachine::sigDebitingDone,
+    m_Debiting->addTransition(this, &VendingMachine::sigDone,
         m_Dispensing);
 
     // Dispensing state transitions
-    m_Dispensing->addTransition(this, &VendingMachine::sigDispenseDone,
+    m_Dispensing->addTransition(this, &VendingMachine::sigDone,
         m_Success);
-    m_Dispensing->addTransition(this, &VendingMachine::sigDispenseFailed,
+    m_Dispensing->addTransition(this, &VendingMachine::sigError,
         m_Error);
 
     // Success and Error state transitions
-    m_Success->addTransition(this, &VendingMachine::sigClearMessage,
+    m_Success->addTransition(this, &VendingMachine::sigDone,
         m_Idle);
-    m_Error->addTransition(this, &VendingMachine::sigClearMessage,
+    m_Error->addTransition(this, &VendingMachine::sigDone,
         m_Idle);
 }
 
@@ -271,7 +245,9 @@ void VendingMachine::enterBooting()
     if (!db.open())
     {
         qWarning() << "DB open failed: " << db.lastError().text();
-        emit sigShowMessage();
+        m_LastError = ErrorCode::DatabaseError;
+
+        emit sigError();
         return;
     }
     else
@@ -280,7 +256,9 @@ void VendingMachine::enterBooting()
         if (!query.exec("select * from priceTable order by id asc"))
         {
             qWarning() << "query failed: " << query.lastError().text();
-            emit sigShowMessage();
+            m_LastError = ErrorCode::DatabaseError;
+
+            emit sigError();
             return;
         }
         else
@@ -318,7 +296,7 @@ void VendingMachine::enterBooting()
         ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
 
         // Transition to Idle state
-        emit sigClearMessage();
+        emit sigDone();
     }
 }
 
@@ -328,12 +306,13 @@ void VendingMachine::enterValidating()
 
     if(e == ErrorCode::Ok)
     {
-        emit sigValidationDone();
+        emit sigDone();
     }
     else
     {
         m_LastError = e;
-        emit sigValidationFailed(e);
+
+        emit sigError();
 	}
 }
 
@@ -343,64 +322,31 @@ void VendingMachine::enterDebiting()
     m_balance -= product.price;
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
 
-	emit sigDebitingDone();
+    emit sigDone();
 }
 
 void VendingMachine::enterDispensing()
 {
-	QSqlDatabase db = QSqlDatabase::database("VendingMachine");
-    if (!db.open())
-    {
-		m_LastError = ErrorCode::DatabaseError;
-        emit sigDispenseFailed(m_LastError);
-        return;
-    }
-
-	QSqlQuery query(db);
-    query.prepare(
-        "UPDATE priceTable "
-        "SET stock = stock - 1 "
-        "WHERE id = :id AND stock > 0"
-    );
-	query.bindValue(":id", m_SelectedProductId);
-
-    if (!query.exec())
-    {
-        m_LastError = ErrorCode::DatabaseError;
-        emit sigDispenseFailed(m_LastError);
-		return;
-    }
-
-    if(query.numRowsAffected() == 0)
-    {
-        m_LastError = ErrorCode::DatabaseError;
-        emit sigDispenseFailed(m_LastError);
-        return;
-	}
-
-    // after dispense
-    auto& product = m_ProductModel.products()[m_SelectedProductId];
-    --product.stock;
-    emit m_ProductModel.productsChanged(product);
-	emit sigDispenseDone();
+    dispense();
 }
-
-#include <QMessageBox>
 
 void VendingMachine::enterSuccess()
 {
-	logTransaction(ErrorCode::Ok, m_SelectedProductId);
+    logLastTransaction();
 
-	QMessageBox::information(this, "판매 완료", "상품이 정상적으로 배출되었습니다.");
-    emit sigClearMessage();
-	//m_FeedbackTimer.start();
+    showMessageBox("판매 완료", "상품이 정상적으로 배출되었습니다.");
+    emit sigDone();
 }
 
-void VendingMachine::enterError(ErrorCode e)
+void VendingMachine::enterError()
 {
-    logTransaction(e, m_SelectedProductId);
+    logLastTransaction();
 
-    QMessageBox::information(this, "판매 실패", "상품 판매가 실패하였습니다.");
-	emit sigClearMessage();
-	//m_FeedbackTimer.start();
+    showMessageBox("판매 실패", ErrorCode2String(m_LastError));
+    emit sigDone();
+}
+
+void VendingMachine::showMessageBox(const QString& title, const QString& text)
+{
+    QMessageBox::information(this, title, text);
 }

@@ -37,7 +37,8 @@ public:
     ~VendingMachine();
 
     ErrorCode canSell(int id) const;
-    void dispense(int id);
+    void dispense();
+    void logLastTransaction();
     void logTransaction(ErrorCode e, int id);
 
 public slots:
@@ -46,14 +47,9 @@ public slots:
 signals:
     // FSM I/O Events
     void sigSelectionProduct(int id);
-    void sigValidationDone();
-    void sigValidationFailed(ErrorCode e);
-    void sigDebitingDone();
-    void sigDispenseDone();
-    void sigDispenseFailed(ErrorCode e);
 
-    void sigShowMessage();
-    void sigClearMessage();
+    void sigDone();
+    void sigError();
 
 private:
     // FSM State Configuration
@@ -64,7 +60,9 @@ private:
     void enterDebiting();
     void enterDispensing();
     void enterSuccess();
-    void enterError(ErrorCode e);    
+    void enterError();
+
+    void showMessageBox(const QString& title, const QString& text);
 
 private:
     Ui::VendingMachine *ui;
@@ -85,8 +83,6 @@ private:
     QState* m_Dispensing = nullptr;
     QState* m_Success = nullptr;
     QState* m_Error = nullptr;
-
-    QTimer m_FeedbackTimer;
 };
 
 #endif // VENDINGMACHINE_H
