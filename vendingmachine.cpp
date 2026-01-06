@@ -14,6 +14,7 @@
 #include "menuitem.h"
 #include "DatabaseUtils.h"
 
+// Convert ErrorCode to description string
 static QString ErrorCode2String(VendingMachine::ErrorCode e)
 {
     QString description;
@@ -65,6 +66,7 @@ VendingMachine::VendingMachine(QWidget* parent)
 
     ui->scrollAreaWidgetContents->setLayout(layout);
 
+	// Connect deposit and change buttons
     connect(ui->btnDeposit, &QPushButton::clicked,
         [this]() {m_CashFlowAmount = 1000; emit sigCashFlow(); });
     connect(ui->btnChange, &QPushButton::clicked,
@@ -88,6 +90,7 @@ VendingMachine::~VendingMachine()
     delete ui;
 }
 
+// check if product can be sold
 VendingMachine::ErrorCode VendingMachine::canSell(int id) const
 {
     // check if product exists
@@ -111,6 +114,7 @@ VendingMachine::ErrorCode VendingMachine::canSell(int id) const
     return ErrorCode::Ok;
 }
 
+// dispense product (deduct stock by 1)
 void VendingMachine::dispense()
 {
     QSqlDatabase db = Db::database();
@@ -142,6 +146,7 @@ void VendingMachine::dispense()
     emit sigDone();
 }
 
+// deduct product price from balance
 void VendingMachine::debit()
 {
     QSqlDatabase db = Db::database();
@@ -171,7 +176,7 @@ void VendingMachine::debit()
         return;
     }
 
-    // after debit
+	// update balance
     m_Balance = getBalance();
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_Balance));
 
@@ -212,7 +217,7 @@ void VendingMachine::cashFlow(int amount)
         return;
     }
 
-    // after debit
+	// update balance
     m_Balance = getBalance();
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_Balance));
 
@@ -231,6 +236,7 @@ void VendingMachine::logLastTransaction()
 {
     logTransaction(m_LastError, m_SelectedProductId);
 }
+// log transaction with given error code and product id
 void VendingMachine::logTransaction(ErrorCode e, int id)
 {
     QSqlDatabase db = Db::database();
@@ -311,7 +317,7 @@ void VendingMachine::setupStateMachine()
     // Set the initial state
     m_StateMachine.setInitialState(m_Booting);
 
-    // Connect state entered signals to corresponding slots or lambdas
+    // Connect state signals to corresponding slots or lambdas
     connect(m_Booting, &QState::entered,
         this, &VendingMachine::enterBooting);
     connect(m_Idle, &QState::entered,
@@ -450,6 +456,7 @@ void VendingMachine::enterValidating()
 {
     setStatus(QStringLiteral("선택한 상품 확인 중..."));
 
+	// check if product can be sold
     const ErrorCode e = canSell(m_SelectedProductId);
 
     if (e == ErrorCode::Ok)
@@ -475,6 +482,7 @@ void VendingMachine::enterCashFlow()
 {
     setStatus(QStringLiteral("잔액 처리 중..."));
 
+	// set last error code based on cash flow amount
     m_LastError = m_CashFlowAmount > 0 ? ErrorCode::Deposit : ErrorCode::Change;
     m_Timer.singleShot(500, this, [this]() { cashFlow(m_CashFlowAmount); });
 }
