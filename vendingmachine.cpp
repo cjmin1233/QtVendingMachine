@@ -22,13 +22,16 @@ static QString ErrorCode2String(VendingMachine::ErrorCode e)
     case VendingMachine::ErrorCode::Ok:
         description = "정상 판매.";
         break;
-	case VendingMachine::ErrorCode::Debit:
+    case VendingMachine::ErrorCode::Debit:
         description = "잔액 차감.";
-		break;
+        break;
     case VendingMachine::ErrorCode::Deposit:
         description = "입금.";
         break;
-    case VendingMachine::ErrorCode::InsufficientBalance:
+    case VendingMachine::ErrorCode::Change:
+        description = "잔돈 반환.";
+        break;
+    case VendingMachine::ErrorCode::InvalidBalance:
         description = "잔액 부족.";
         break;
     case VendingMachine::ErrorCode::OutOfStock:
@@ -49,6 +52,7 @@ VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
     , m_ProductModel(this)
+    , m_StateMachine(this)
     , m_Timer(this)
 {
     ui->setupUi(this);
@@ -62,7 +66,16 @@ VendingMachine::VendingMachine(QWidget* parent)
     ui->scrollAreaWidgetContents->setLayout(layout);
 
     connect(ui->btnDeposit, &QPushButton::clicked,
-            [this](){ emit sigDeposit(); });
+        [this]() {m_CashFlowAmount = 1000; emit sigCashFlow(); });
+    connect(ui->btnChange, &QPushButton::clicked,
+        [this]()
+        {
+            m_CashFlowAmount = -m_Balance;
+            if (m_CashFlowAmount != 0)
+            {
+                emit sigCashFlow();
+            }
+        });
 
     setupStateMachine();
     m_StateMachine.start();
@@ -92,7 +105,7 @@ VendingMachine::ErrorCode VendingMachine::canSell(int id) const
 
     if (m_Balance < product.price)
     {
-        return ErrorCode::InsufficientBalance;
+        return ErrorCode::InvalidBalance;
     }
 
     return ErrorCode::Ok;
@@ -165,8 +178,18 @@ void VendingMachine::debit()
     emit sigDone();
 }
 
-void VendingMachine::deposit(int amount)
+// change balance by amount (can be negative)
+void VendingMachine::cashFlow(int amount)
 {
+    // check for insufficient balance
+    int newBalance = m_Balance + amount;
+    if (newBalance < 0)
+    {
+        m_LastError = ErrorCode::InvalidBalance;
+        emit sigError();
+        return;
+    }
+
     QSqlDatabase db = Db::database();
     QSqlQuery query(db);
 
@@ -174,11 +197,9 @@ void VendingMachine::deposit(int amount)
         "(log_time, product_id, balance, error_code, description) "
         "VALUES (:log_time, :product_id, :balance, :error_code, :description)");
 
-    m_LastError = ErrorCode::Deposit;
-
     query.bindValue(":log_time", QDateTime::currentDateTime());
     query.bindValue(":product_id", 0);
-    query.bindValue(":balance", m_Balance + amount);
+    query.bindValue(":balance", newBalance);
     query.bindValue(":error_code", static_cast<int>(m_LastError));
     query.bindValue(":description", ErrorCode2String(m_LastError));
 
@@ -186,9 +207,9 @@ void VendingMachine::deposit(int amount)
     {
         Db::rollback();
 
-		m_LastError = ErrorCode::DatabaseError;
+        m_LastError = ErrorCode::DatabaseError;
         emit sigError();
-		return;
+        return;
     }
 
     // after debit
@@ -265,10 +286,12 @@ void VendingMachine::setupStateMachine()
     m_Booting = new QState();
     m_OutofService = new QState();
     m_Idle = new QState();
+
     m_Validating = new QState();
     m_Debiting = new QState();
-    m_Depositing = new QState();
+    m_CashFlow = new QState();
     m_Dispensing = new QState();
+
     m_Success = new QState();
     m_Error = new QState();
 
@@ -279,7 +302,7 @@ void VendingMachine::setupStateMachine()
 
     m_StateMachine.addState(m_Validating);
     m_StateMachine.addState(m_Debiting);
-    m_StateMachine.addState(m_Depositing);
+    m_StateMachine.addState(m_CashFlow);
     m_StateMachine.addState(m_Dispensing);
 
     m_StateMachine.addState(m_Success);
@@ -309,8 +332,8 @@ void VendingMachine::setupStateMachine()
         this, &VendingMachine::enterValidating);
     connect(m_Debiting, &QState::entered,
         this, &VendingMachine::enterDebiting);
-    connect(m_Depositing, &QState::entered,
-        this, &VendingMachine::enterDepositing);
+    connect(m_CashFlow, &QState::entered,
+        this, &VendingMachine::enterCashFlow);
     connect(m_Dispensing, &QState::entered,
         this, &VendingMachine::enterDispensing);
 
@@ -328,8 +351,8 @@ void VendingMachine::setupStateMachine()
     // Idle state transitions
     m_Idle->addTransition(this, &VendingMachine::sigSelectionProduct,
         m_Validating);
-    m_Idle->addTransition(this, &VendingMachine::sigDeposit,
-		m_Depositing);
+    m_Idle->addTransition(this, &VendingMachine::sigCashFlow,
+        m_CashFlow);
 
     // Validating state transitions
     m_Validating->addTransition(this, &VendingMachine::sigDone,
@@ -341,11 +364,11 @@ void VendingMachine::setupStateMachine()
     m_Debiting->addTransition(this, &VendingMachine::sigDone,
         m_Dispensing);
 
-	// Depositing state transitions
-    m_Depositing->addTransition(this, &VendingMachine::sigDone,
-		m_Idle);
-	m_Depositing->addTransition(this, &VendingMachine::sigError,
-		m_Error);
+    // CashFlow state transitions
+    m_CashFlow->addTransition(this, &VendingMachine::sigDone,
+        m_Idle);
+    m_CashFlow->addTransition(this, &VendingMachine::sigError,
+        m_Error);
 
     // Dispensing state transitions
     m_Dispensing->addTransition(this, &VendingMachine::sigDone,
@@ -448,11 +471,12 @@ void VendingMachine::enterDebiting()
     m_Timer.singleShot(500, this, [this]() { debit(); });
 }
 
-void VendingMachine::enterDepositing()
+void VendingMachine::enterCashFlow()
 {
-    setStatus(QStringLiteral("입금 처리 중..."));
+    setStatus(QStringLiteral("잔액 처리 중..."));
 
-    m_Timer.singleShot(500, this, [this]() { deposit(1000); });
+    m_LastError = m_CashFlowAmount > 0 ? ErrorCode::Deposit : ErrorCode::Change;
+    m_Timer.singleShot(500, this, [this]() { cashFlow(m_CashFlowAmount); });
 }
 
 void VendingMachine::enterDispensing()
@@ -474,7 +498,7 @@ void VendingMachine::enterError()
 {
     logLastTransaction();
 
-    showMessageBox("판매 실패", ErrorCode2String(m_LastError));
+    showMessageBox("실패", ErrorCode2String(m_LastError));
     emit sigDone();
 }
 

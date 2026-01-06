@@ -26,8 +26,9 @@ public:
         Ok = 0,
         Debit = 1,
         Deposit = 2,
+        Change = 3,
 
-        InsufficientBalance = 100,
+        InvalidBalance = 100,
         OutOfStock = 101,
         InvalidProduct = 102,
 
@@ -41,7 +42,7 @@ public:
     ErrorCode canSell(int id) const;
     void dispense();
     void debit();
-    void deposit(int amount);
+    void cashFlow(int amount);
 
     void logLastTransaction();
     void logTransaction(ErrorCode e, int id);
@@ -52,23 +53,24 @@ public slots:
 signals:
     // FSM I/O Events
     void sigSelectionProduct(int id);
-    void sigDeposit();
+    void sigCashFlow();
 
     void sigDone();
     void sigError();
 
-private:
+private slots:
     // FSM State Configuration
     void setupStateMachine();
 
     void enterBooting();
     void enterValidating();
     void enterDebiting();
-	void enterDepositing();
+	void enterCashFlow();
     void enterDispensing();
     void enterSuccess();
     void enterError();
 
+private:
     void showMessageBox(const QString& title, const QString& text);
     void setStatus(const QString& text);
 
@@ -79,18 +81,20 @@ private:
 
     ProductModel m_ProductModel;
     int m_Balance = 0;
+	int m_CashFlowAmount = 0;
 
 	int m_SelectedProductId = -1;
 	ErrorCode m_LastError = ErrorCode::Ok;
 
     // FSM
     QStateMachine m_StateMachine;
+
     QState* m_Booting = nullptr;
     QState* m_OutofService = nullptr;
     QState* m_Idle = nullptr;
     QState* m_Validating = nullptr;
     QState* m_Debiting = nullptr;
-	QState* m_Depositing = nullptr;
+	QState* m_CashFlow = nullptr;
     QState* m_Dispensing = nullptr;
     QState* m_Success = nullptr;
     QState* m_Error = nullptr;
