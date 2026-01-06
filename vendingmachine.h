@@ -63,6 +63,7 @@ private:
     void enterError();
 
     void showMessageBox(const QString& title, const QString& text);
+    void setStatus(const QString& text);
 
 private:
     Ui::VendingMachine *ui;
@@ -83,6 +84,8 @@ private:
     QState* m_Dispensing = nullptr;
     QState* m_Success = nullptr;
     QState* m_Error = nullptr;
+
+    QTimer m_Timer;
 };
 
 #endif // VENDINGMACHINE_H

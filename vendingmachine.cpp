@@ -12,6 +12,7 @@
 
 #include "menuwidget.h"
 #include "menuitem.h"
+#include "DatabaseUtils.h"
 
 static QString ErrorCode2String(VendingMachine::ErrorCode e)
 {
@@ -42,6 +43,7 @@ VendingMachine::VendingMachine(QWidget* parent)
     : QWidget(parent)
     , ui(new Ui::VendingMachine)
     , m_ProductModel(this)
+    , m_Timer(this)
 {
     ui->setupUi(this);
 
@@ -55,6 +57,8 @@ VendingMachine::VendingMachine(QWidget* parent)
 
     setupStateMachine();
     m_StateMachine.start();
+
+    m_Timer.setSingleShot(true);
 }
 
 VendingMachine::~VendingMachine()
@@ -85,8 +89,16 @@ VendingMachine::ErrorCode VendingMachine::canSell(int id) const
 
 void VendingMachine::dispense()
 {
-    QSqlDatabase db = QSqlDatabase::database("VendingMachine");
-    if (!db.open())
+    QSqlDatabase db = Db::database();
+    if (!db.isOpen())
+    {
+        m_LastError = ErrorCode::DatabaseError;
+
+        emit sigError();
+        return;
+    }
+
+    if(!Db::begin())
     {
         m_LastError = ErrorCode::DatabaseError;
 
@@ -104,6 +116,16 @@ void VendingMachine::dispense()
 
     if (!query.exec() || query.numRowsAffected() == 0)
     {
+        Db::rollback();
+        m_LastError = ErrorCode::DatabaseError;
+
+        emit sigError();
+        return;
+    }
+
+    if(!Db::commit())
+    {
+        Db::rollback();
         m_LastError = ErrorCode::DatabaseError;
 
         emit sigError();
@@ -188,9 +210,18 @@ void VendingMachine::setupStateMachine()
     connect(m_Booting, &QState::entered,
         this, &VendingMachine::enterBooting);
     connect(m_Idle, &QState::entered,
-            [this](){ui->scrollArea->setEnabled(true);});
+            [this]()
+            {
+                ui->scrollArea->setEnabled(true);
+                setStatus(QStringLiteral("대기 중 - 상품을 선택하세요."));
+            });
     connect(m_Idle, &QState::exited,
-            [this](){ui->scrollArea->setEnabled(false);});
+            [this]()
+            {
+                ui->scrollArea->setEnabled(false);
+            });
+    connect(m_OutofService, &QState::entered,
+            [this](){setStatus(QStringLiteral("점검 중(Out of Service)"));});
 
     connect(m_Validating, &QState::entered,
             this, &VendingMachine::enterValidating);
@@ -238,11 +269,11 @@ void VendingMachine::setupStateMachine()
 
 void VendingMachine::enterBooting()
 {
-    // load products from database
-    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", QString("VendingMachine"));
-    db.setDatabaseName("maindb.db");
+    setStatus(QStringLiteral("부팅 중..."));
 
-    if (!db.open())
+    // load products from database
+    QSqlDatabase db = Db::database();
+    if (!db.isOpen())
     {
         qWarning() << "DB open failed: " << db.lastError().text();
         m_LastError = ErrorCode::DatabaseError;
@@ -250,84 +281,93 @@ void VendingMachine::enterBooting()
         emit sigError();
         return;
     }
+
+    //
+    QSqlQuery query(db);
+    if (!query.exec("select * from priceTable order by id asc"))
+    {
+        qWarning() << "query failed: " << query.lastError().text();
+        m_LastError = ErrorCode::DatabaseError;
+
+        emit sigError();
+        return;
+    }
     else
     {
-        QSqlQuery query(db);
-        if (!query.exec("select * from priceTable order by id asc"))
+        while (query.next())
         {
-            qWarning() << "query failed: " << query.lastError().text();
-            m_LastError = ErrorCode::DatabaseError;
+            const int id = query.value(0).toInt();
+            const QString& name = query.value(1).toString();
+            const int price = query.value(2).toInt();
+            const int stock = query.value(3).toInt();
+            const QString& category = query.value(4).toString();
 
-            emit sigError();
-            return;
+            ProductModel::Product p = { id,name,price,stock,category };
+            m_ProductModel.insert(p);
         }
-        else
-        {
-            while (query.next())
-            {
-                const int id = query.value(0).toInt();
-                const QString& name = query.value(1).toString();
-                const int price = query.value(2).toInt();
-                const int stock = query.value(3).toInt();
-                const QString& category = query.value(4).toString();
-
-                ProductModel::Product p = { id,name,price,stock,category };
-                m_ProductModel.insert(p);
-            }
-        }
-
-        // define category order
-        QStringList categoryOrder = { "음료", "커피", "주스", "기타" };
-
-        // create menu widgets for each category
-        for (const auto& categoryName : categoryOrder)
-        {
-            auto menuLabel = new QLabel(categoryName);
-            auto menu = new MenuWidget(categoryName, m_ProductModel);
-
-            menuLabel->setIndent(10);
-            // connect menu item clicked signal to slot
-            connect(menu, SIGNAL(menuItemClicked(MenuItem*)), this, SLOT(OnMenuClicked(MenuItem*)));
-
-            ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
-            ui->scrollAreaWidgetContents->layout()->addWidget(menu);
-        }
-
-        ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
-
-        // Transition to Idle state
-        emit sigDone();
     }
+
+    // define category order
+    QStringList categoryOrder = { "음료", "커피", "주스", "기타" };
+
+    // create menu widgets for each category
+    for (const auto& categoryName : categoryOrder)
+    {
+        auto menuLabel = new QLabel(categoryName);
+        auto menu = new MenuWidget(categoryName, m_ProductModel);
+
+        menuLabel->setIndent(10);
+        // connect menu item clicked signal to slot
+        connect(menu, SIGNAL(menuItemClicked(MenuItem*)), this, SLOT(OnMenuClicked(MenuItem*)));
+
+        ui->scrollAreaWidgetContents->layout()->addWidget(menuLabel);
+        ui->scrollAreaWidgetContents->layout()->addWidget(menu);
+    }
+
+    ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
+
+    // Transition to Idle state
+    emit sigDone();
 }
 
 void VendingMachine::enterValidating()
 {
+    setStatus(QStringLiteral("선택한 상품 확인 중..."));
+
 	const ErrorCode e = canSell(m_SelectedProductId);
 
     if(e == ErrorCode::Ok)
     {
-        emit sigDone();
+        m_Timer.singleShot(400, this, [this](){emit sigDone();});
+        // emit sigDone();
     }
     else
     {
         m_LastError = e;
 
-        emit sigError();
+        m_Timer.singleShot(400, this, [this](){emit sigError();});
+        // emit sigError();
 	}
 }
 
 void VendingMachine::enterDebiting()
 {
+    setStatus(QStringLiteral("결제 처리 중..."));
+
 	const auto& product = m_ProductModel.products()[m_SelectedProductId];
     m_balance -= product.price;
     ui->labelBalance->setText(QString("잔액: %1 원").arg(m_balance));
 
-    emit sigDone();
+    // emit sigDone();
+    m_Timer.singleShot(500, this, [this](){emit sigDone();});
 }
 
 void VendingMachine::enterDispensing()
 {
-    dispense();
+    // dispense();
+    setStatus(QStringLiteral("물품 배출중..."));
+
+    m_Timer.singleShot(1200, this, [this](){dispense();});
 }
 
 void VendingMachine::enterSuccess()
@@ -349,4 +389,9 @@ void VendingMachine::enterError()
 void VendingMachine::showMessageBox(const QString& title, const QString& text)
 {
     QMessageBox::information(this, title, text);
+}
+
+void VendingMachine::setStatus(const QString& text)
+{
+    ui->labelStatus->setText(text);
 }

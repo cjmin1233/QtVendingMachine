@@ -28,6 +28,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         resources.qrc
         menuitem.h menuitem.cpp
         productmodel.h productmodel.cpp
+        DatabaseUtils.h
 
 
 
